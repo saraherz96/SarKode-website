@@ -1,0 +1,199 @@
+import { Router, type Request, type Response } from 'express';
+import OpenAI from 'openai';
+import { openai, CHAT_MODEL, SYSTEM_PROMPT, getTools } from '../agent';
+import { persistLead, upsertConversation, EMAIL_RE, type LeadRecord } from '../store';
+import { requestAvailability, confirmSlot } from '../scheduling';
+
+const router = Router();
+
+interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface CaptureLeadInput {
+  name: string;
+  email: string;
+  summary: string;
+  service: string;
+}
+
+interface ScheduleCallInput {
+  name: string;
+  email: string;
+}
+
+interface CallScheduled {
+  humanLabel: string;
+  start: string;
+  end: string;
+}
+
+function isChatTurn(v: unknown): v is ChatTurn {
+  if (!v || typeof v !== 'object') return false;
+  const t = v as Record<string, unknown>;
+  return (t.role === 'user' || t.role === 'assistant') && typeof t.content === 'string';
+}
+
+function parseToolArgs<T>(raw: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function askOpenAI(messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]) {
+  return openai.chat.completions.create({
+    model: CHAT_MODEL,
+    max_tokens: 1024,
+    tools: getTools(),
+    messages,
+  });
+}
+
+router.post('/', async (req: Request, res: Response) => {
+  const { messages, conversationId } = (req.body ?? {}) as { messages?: unknown; conversationId?: unknown };
+
+  if (!Array.isArray(messages) || messages.length === 0 || !messages.every(isChatTurn)) {
+    return res.status(400).json({ error: 'Se requiere un arreglo "messages" con turnos { role, content }.' });
+  }
+  const convoId = typeof conversationId === 'string' && conversationId.trim() ? conversationId.trim() : null;
+
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'El asistente de IA no está configurado en el servidor (falta OPENAI_API_KEY).' });
+  }
+
+  const history: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...messages.map((m) => ({ role: m.role, content: m.content }) as OpenAI.Chat.Completions.ChatCompletionMessageParam),
+  ];
+
+  try {
+    let completion = await askOpenAI(history);
+    let message = completion.choices[0].message;
+    let lead: LeadRecord | null = null;
+    let callScheduled: CallScheduled | null = null;
+    let conversationLeadId: string | null = null;
+
+    // At most one round of tool calls per request. The model may request multiple
+    // tools in one turn — execute them all, then return one 'tool' message per call.
+    if (message.tool_calls && message.tool_calls.length > 0) {
+      history.push(message);
+
+      for (const toolCall of message.tool_calls) {
+        if (toolCall.type !== 'function') continue;
+        const { name, arguments: rawArgs } = toolCall.function;
+
+        if (name === 'capture_lead') {
+          const input = parseToolArgs<CaptureLeadInput>(rawArgs);
+          const email = (input?.email || '').trim();
+          if (input && EMAIL_RE.test(email) && input.name?.trim() && input.summary?.trim()) {
+            lead = await persistLead({
+              name: input.name.trim(),
+              email,
+              message: input.summary.trim(),
+              service: input.service?.trim() || null,
+              source: 'chat',
+            });
+            conversationLeadId = lead.id;
+            console.info(`[chat] lead capturado: ${lead.name} <${lead.email}>${lead.service ? ` (${lead.service})` : ''}`);
+            history.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Lead guardado correctamente. El equipo de SarKode lo revisará pronto.',
+            });
+          } else {
+            history.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Error: el email no tiene un formato válido u otro dato requerido falta. Pide el dato correcto antes de reintentar.',
+            });
+          }
+        } else if (name === 'schedule_call') {
+          const input = parseToolArgs<ScheduleCallInput>(rawArgs);
+          const email = (input?.email || '').trim();
+          if (!input || !EMAIL_RE.test(email) || !input.name?.trim()) {
+            history.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Error: el nombre o el email no son válidos. Pide el dato correcto antes de reintentar.',
+            });
+            continue;
+          }
+          try {
+            // The chat auto-books the earliest open slot — the "pick a time" UI lives in
+            // the standalone scheduling form, which calls /availability and /confirm directly.
+            const slots = await requestAvailability();
+            if (slots.length === 0) throw new Error('No hay horarios disponibles en los próximos días.');
+            const chosen = slots[0];
+            await confirmSlot(input.name.trim(), email, chosen.start, chosen.end);
+            callScheduled = { humanLabel: chosen.humanLabel, start: chosen.start, end: chosen.end };
+            const callLead = await persistLead({
+              name: input.name.trim(),
+              email,
+              message: `Llamada de 30 min agendada para ${chosen.humanLabel}.`,
+              service: null,
+              source: 'chat',
+            });
+            conversationLeadId = callLead.id;
+            console.info(`[chat] llamada agendada para ${input.name.trim()} <${email}>: ${chosen.humanLabel}`);
+            history.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: `Llamada agendada con éxito para ${chosen.humanLabel}. Se envió invitación de calendario a ${email}.`,
+            });
+          } catch (err) {
+            console.error('[chat] error agendando llamada:', err);
+            history.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Error: no se pudo agendar la llamada automáticamente. Discúlpate y sugiere escribir a sofimh1197@gmail.com.',
+            });
+          }
+        } else {
+          history.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Error: función desconocida "${name}".`,
+          });
+        }
+      }
+
+      completion = await askOpenAI(history);
+      message = completion.choices[0].message;
+    }
+
+    const reply = message.content?.trim() || 'Gracias por tu mensaje.';
+
+    if (convoId) {
+      void upsertConversation({
+        id: convoId,
+        leadId: conversationLeadId,
+        messages: [...messages, { role: 'assistant', content: reply }],
+        service: lead?.service ?? null,
+      }).catch((err) => {
+        console.error('[chat] error guardando conversación:', err instanceof Error ? err.message : err);
+      });
+    }
+
+    return res.json({
+      reply,
+      leadCaptured: lead ? { name: lead.name, email: lead.email, service: lead.service } : null,
+      callScheduled,
+    });
+  } catch (err) {
+    if (err instanceof OpenAI.AuthenticationError) {
+      console.error('[chat] clave de API inválida:', err.message);
+      return res.status(503).json({ error: 'El asistente de IA no está disponible en este momento.' });
+    }
+    if (err instanceof OpenAI.RateLimitError) {
+      console.error('[chat] rate limited:', err.message);
+      return res.status(429).json({ error: 'El asistente está recibiendo muchas solicitudes. Intenta de nuevo en un momento.' });
+    }
+    console.error('[chat] error inesperado:', err);
+    return res.status(502).json({ error: 'No se pudo conectar con el asistente. Intenta de nuevo.' });
+  }
+});
+
+export default router;

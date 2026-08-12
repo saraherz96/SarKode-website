@@ -1,0 +1,19 @@
+{
+  "name": "sarkode-website",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SarKode landing page — React/TypeScript frontend + Node/Express backend",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

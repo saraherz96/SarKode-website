@@ -1,0 +1,172 @@
+{
+  "name": "SarKode - Agendar llamada",
+  "nodes": [
+    {
+      "id": "sticky_notes",
+      "name": "Notas de configuración",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-40, -360],
+      "parameters": {
+        "width": 560,
+        "height": 380,
+        "content": "## Setup\n1. Abre los 2 nodos **Google Calendar** y en el campo *Credential* selecciona (o crea) `Google Calendar OAuth2` autorizando con **sofimh1197@gmail.com**.\n2. Revisa el Code node **Listar horarios disponibles**: ajusta `TIMEZONE`, `WORK_START_HOUR`, `WORK_END_HOUR` si hace falta.\n3. En el nodo **Crear evento**, el campo *Conference Data* ya está configurado para crear un enlace de **Google Meet** automáticamente en cada llamada agendada.\n4. Activa el workflow (toggle arriba a la derecha).\n5. Copia la **Production URL** del nodo Webhook y pégala en `backend/.env` como `N8N_SCHEDULE_WEBHOOK_URL`.\n\n## Cómo funciona\nUn mismo webhook maneja dos casos, según si el body trae `start` o no:\n- **Sin `start`** → busca disponibilidad en el calendario y devuelve una **lista** de horarios libres (`{success:true, slots:[...]}`). No agenda nada.\n- **Con `start`/`end`/`name`/`email`** (el horario que la persona eligió, ya con sus datos) → crea el evento con Google Meet en ese horario e invita a `email`, y responde `{success:true}`.\n\nEl frontend primero pide la lista de horarios (sin datos personales), y una vez elegido el día y la hora, pide nombre/correo y llama de nuevo con `start`/`end` para confirmar."
+      }
+    },
+    {
+      "id": "webhook_trigger",
+      "name": "Webhook - Agendar llamada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-40, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "schedule-call",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "if_has_slot",
+      "name": "¿Horario elegido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [220, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-start",
+              "leftValue": "={{ $json.body.start }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "gcal_availability",
+      "name": "Disponibilidad",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [480, 80],
+      "parameters": {
+        "resource": "calendar",
+        "operation": "availability",
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "sofimh1197@gmail.com",
+          "cachedResultName": "sofimh1197@gmail.com"
+        },
+        "timeMin": "={{ $now.toISO() }}",
+        "timeMax": "={{ $now.plus({ days: 10 }).toISO() }}",
+        "options": {}
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Calendar - SarKode"
+        }
+      }
+    },
+    {
+      "id": "code_find_slot",
+      "name": "Listar horarios disponibles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 80],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// --- Configuración: ajusta a la disponibilidad real ---\nconst CALENDAR_EMAIL = 'sofimh1197@gmail.com';\nconst TIMEZONE = 'America/Mexico_City'; // ajusta si su zona horaria es otra\nconst WORK_START_HOUR = 9;   // 9:00 am\nconst WORK_END_HOUR = 18;    // 6:00 pm\nconst SLOT_MINUTES = 30;\nconst MIN_NOTICE_HOURS = 4;  // no ofrecer horarios antes de N horas desde ahora\nconst SEARCH_DAYS = 10;      // buscar en los próximos N días\nconst MAX_SLOTS = 8;         // cuántas opciones devolver como máximo\n\n// --- Recolectar los períodos ocupados que devolvió el nodo \"Disponibilidad\" ---\nlet busy = [];\nfor (const item of $input.all()) {\n  const j = item.json;\n  if (Array.isArray(j.busy)) {\n    busy.push(...j.busy);\n  } else if (j.calendars && j.calendars[CALENDAR_EMAIL] && Array.isArray(j.calendars[CALENDAR_EMAIL].busy)) {\n    busy.push(...j.calendars[CALENDAR_EMAIL].busy);\n  } else if (j.start && j.end) {\n    busy.push({ start: j.start, end: j.end });\n  }\n}\nconst busyRanges = busy.map((b) => ({\n  start: DateTime.fromISO(b.start).toMillis(),\n  end: DateTime.fromISO(b.end).toMillis(),\n}));\n\nfunction overlaps(startMs, endMs) {\n  return busyRanges.some((b) => startMs < b.end && endMs > b.start);\n}\n\nconst now = DateTime.now().setZone(TIMEZONE);\nconst earliest = now.plus({ hours: MIN_NOTICE_HOURS });\nconst slots = [];\n\nfor (let d = 0; d < SEARCH_DAYS && slots.length < MAX_SLOTS; d++) {\n  const day = now.plus({ days: d }).startOf('day');\n  if (day.weekday === 6 || day.weekday === 7) continue; // fin de semana (Luxon: 6=sábado, 7=domingo)\n\n  for (let hour = WORK_START_HOUR; hour < WORK_END_HOUR && slots.length < MAX_SLOTS; hour++) {\n    for (let min = 0; min < 60 && slots.length < MAX_SLOTS; min += SLOT_MINUTES) {\n      const slotStart = day.set({ hour, minute: min, second: 0, millisecond: 0 });\n      const slotEnd = slotStart.plus({ minutes: SLOT_MINUTES });\n      if (slotStart < earliest) continue;\n      if (overlaps(slotStart.toMillis(), slotEnd.toMillis())) continue;\n\n      slots.push({\n        start: slotStart.toISO(),\n        end: slotEnd.toISO(),\n        humanLabel: slotStart.setLocale('es').toFormat(\"cccc d 'de' LLLL 'a las' h:mm a\"),\n      });\n    }\n  }\n}\n\nreturn [{ json: { slots } }];"
+      }
+    },
+    {
+      "id": "respond_availability",
+      "name": "Responder disponibilidad",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1000, 80],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, slots: $json.slots } }}"
+      }
+    },
+    {
+      "id": "gcal_create_event",
+      "name": "Crear evento",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [480, -140],
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "sofimh1197@gmail.com",
+          "cachedResultName": "sofimh1197@gmail.com"
+        },
+        "start": "={{ $json.body.start }}",
+        "end": "={{ $json.body.end }}",
+        "useDefaultReminders": true,
+        "additionalFields": {
+          "summary": "–Follow up – SarKode",
+          "description": "=Llamada agendada automáticamente vía el asistente de SarKode.\nCliente: {{ $json.body.name }}\nEmail: {{ $json.body.email }}",
+          "attendees": "={{ [ $json.body.email ] }}",
+          "sendUpdates": "all",
+          "conferenceDataUi": {
+            "conferenceDataValues": {
+              "conferenceSolution": "hangoutsMeet"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Calendar - SarKode"
+        }
+      }
+    },
+    {
+      "id": "respond_confirm",
+      "name": "Responder confirmación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [740, -140],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true } }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Agendar llamada": {
+      "main": [[{ "node": "¿Horario elegido?", "type": "main", "index": 0 }]]
+    },
+    "¿Horario elegido?": {
+      "main": [
+        [{ "node": "Crear evento", "type": "main", "index": 0 }],
+        [{ "node": "Disponibilidad", "type": "main", "index": 0 }]
+      ]
+    },
+    "Disponibilidad": {
+      "main": [[{ "node": "Listar horarios disponibles", "type": "main", "index": 0 }]]
+    },
+    "Listar horarios disponibles": {
+      "main": [[{ "node": "Responder disponibilidad", "type": "main", "index": 0 }]]
+    },
+    "Crear evento": {
+      "main": [[{ "node": "Responder confirmación", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,308 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: #14141a;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: #9c93f0;
+  color: #14141a;
+}
+
+@keyframes sk-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-bounce {
+    animation: none !important;
+  }
+}
+
+/* ---- nav links ---- */
+.sk-nav-link {
+  padding: 9px 16px;
+  border-radius: 9px;
+  font-size: 14px;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.6);
+  transition: color 0.2s;
+}
+.sk-nav-link:hover {
+  color: #f6f1ec;
+}
+.sk-nav-link--active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f6f1ec;
+}
+
+.sk-btn-ghost {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #f6f1ec;
+  padding: 11px 24px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+.sk-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ---- buttons ---- */
+.sk-btn-primary {
+  background: linear-gradient(90deg, #9c93f0, #f2a8c6, #a8c7f0);
+  color: #14141a;
+  padding: 14px 28px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.2s;
+}
+.sk-btn-primary:hover {
+  opacity: 0.88;
+}
+.sk-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sk-btn-outline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #f6f1ec;
+  padding: 14px 28px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  transition: background 0.2s;
+}
+.sk-btn-outline:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* ---- services flip cards ---- */
+.sk-flip-front {
+  transition: opacity 0.25s ease;
+}
+.sk-flip-back {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.sk-flip-card:hover .sk-flip-front {
+  opacity: 0 !important;
+}
+.sk-flip-card:hover .sk-flip-back {
+  opacity: 1 !important;
+}
+
+/* ---- services modal ---- */
+.sk-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  border: none;
+  color: #f6f1ec;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+}
+.sk-modal-card-arrow {
+  transition: transform 0.3s ease;
+}
+.sk-modal-item:hover .sk-modal-card-arrow {
+  transform: rotate(45deg);
+}
+
+.sk-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sk-scroll::-webkit-scrollbar-thumb {
+  background: #9c93f0;
+  border-radius: 999px;
+}
+
+/* ---- footer ---- */
+.sk-footer-link {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.sk-footer-link:hover {
+  color: #f6f1ec;
+}
+
+/* ---- contact modal ---- */
+.sk-contact-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #f6f1ec;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  z-index: 1;
+}
+.sk-calendly-link {
+  color: #f6f1ec;
+  font-size: 14px;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  transition: border-bottom-color 0.2s;
+}
+.sk-calendly-link:hover {
+  border-bottom-color: #9c93f0;
+}
+
+.sk-pill {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+}
+.sk-pill--active {
+  background: linear-gradient(90deg, #9c93f0, #f2a8c6, #a8c7f0);
+  color: #14141a;
+}
+
+.sk-slot-btn {
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f6f1ec;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sk-slot-btn:hover:not(:disabled) {
+  background: rgba(156, 147, 240, 0.15);
+  border-color: rgba(156, 147, 240, 0.4);
+}
+.sk-slot-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sk-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 13px 16px;
+  color: #f6f1ec;
+  font-size: 14px;
+  font-family: inherit;
+}
+.sk-input::placeholder {
+  color: rgba(246, 241, 236, 0.4);
+}
+.sk-textarea {
+  resize: none;
+}
+
+/* ---- responsive ---- */
+@media (max-width: 900px) {
+  .sk-navlinks {
+    display: none !important;
+  }
+  .sk-services-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .sk-modal-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .sk-trabajamos-grid {
+    grid-template-columns: 1fr !important;
+    gap: 28px !important;
+  }
+  .sk-contact-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (max-width: 640px) {
+  .sk-nav {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+  .sk-hero-content {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+    padding-bottom: 64px !important;
+  }
+  .sk-section-pad {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+  }
+  .sk-services-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .sk-modal-card {
+    padding: 20px !important;
+  }
+  .sk-modal-inner {
+    padding: 0 20px 28px !important;
+  }
+  .sk-modal-head {
+    padding: 24px 24px 16px !important;
+  }
+  .sk-contact-col {
+    padding: 32px 24px !important;
+  }
+  .sk-footer {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 16px !important;
+  }
+}
