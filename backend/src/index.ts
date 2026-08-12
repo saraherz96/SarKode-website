@@ -7,9 +7,13 @@ import scheduleCallRouter from './routes/schedule-call';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
-const ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+// Comma-separated list so both the apex and www domains (or prod + local dev) can be allowed at once.
+const ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 
-app.use(cors({ origin: ORIGIN }));
+app.use(cors({ origin: ORIGINS }));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
@@ -21,5 +25,5 @@ app.use('/api/chat', chatRouter);
 app.use('/api/schedule-call', scheduleCallRouter);
 
 app.listen(PORT, () => {
-  console.log(`SarKode API listening on http://localhost:${PORT} (CORS origin: ${ORIGIN})`);
+  console.log(`SarKode API listening on http://localhost:${PORT} (CORS origins: ${ORIGINS.join(', ')})`);
 });

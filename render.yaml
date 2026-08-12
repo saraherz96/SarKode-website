@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: sarkode-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGIN
+        value: https://sarkode.com,https://www.sarkode.com
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: N8N_SCHEDULE_WEBHOOK_URL
+        sync: false
+      - key: N8N_LEAD_NOTIFICATION_WEBHOOK_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
