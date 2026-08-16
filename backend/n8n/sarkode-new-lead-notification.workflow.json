@@ -10,7 +10,7 @@
       "parameters": {
         "width": 560,
         "height": 320,
-        "content": "## Setup\n1. Abre el nodo **Gmail** y en el campo *Credential* crea una credencial `Gmail OAuth2`, autorizando con **sofimh1197@gmail.com**. (Es una credencial distinta a la de Google Calendar del otro workflow, aunque sea la misma cuenta — Gmail y Calendar son APIs/scopes separados en n8n. Esto abre un login de Google — solo la dueña de esa cuenta puede hacerlo.)\n2. Activa el workflow (toggle arriba a la derecha).\n3. Copia la **Production URL** del nodo Webhook y pégala en `backend/.env` como `N8N_LEAD_NOTIFICATION_WEBHOOK_URL`.\n\n## Cómo funciona\nEl backend llama a este webhook (sin esperar la respuesta) cada vez que se guarda un contacto nuevo — por el formulario, el chat del agente, o al agendar una llamada. El body trae `{name, email, message, service, source, receivedAt}`. Este workflow simplemente le manda un correo a sofimh1197@gmail.com con esos datos para poder contactar a la persona."
+        "content": "## Setup\n1. Abre el nodo **Gmail** y en el campo *Credential* crea una credencial `Gmail OAuth2`, autorizando con **sofimh1197@gmail.com**. (Es una credencial distinta a la de Google Calendar del otro workflow, aunque sea la misma cuenta — Gmail y Calendar son APIs/scopes separados en n8n. Esto abre un login de Google — solo la dueña de esa cuenta puede hacerlo.)\n2. Activa el workflow (toggle arriba a la derecha).\n3. Copia la **Production URL** del nodo Webhook y pégala en `backend/.env` como `N8N_LEAD_NOTIFICATION_WEBHOOK_URL`.\n\n## Cómo funciona\nEl backend llama a este webhook (sin esperar la respuesta) cada vez que se guarda un contacto nuevo — por el formulario, el chat del agente, al agendar una llamada, o cuando alguien en el chat prefiere que lo contacten por teléfono. El body trae `{name, email, message, service, phone, source, receivedAt}` (`phone` viene vacío salvo que la persona lo haya compartido). Este workflow simplemente le manda un correo a sofimh1197@gmail.com con esos datos para poder contactar a la persona."
       }
     },
     {
@@ -38,7 +38,7 @@
         "sendTo": "sofimh1197@gmail.com",
         "subject": "=Nuevo contacto SarKode — {{ $json.body.name }} ({{ $json.body.service || 'sin servicio especificado' }})",
         "emailType": "text",
-        "message": "=Nuevo contacto desde el sitio de SarKode.\n\nNombre: {{ $json.body.name }}\nEmail: {{ $json.body.email }}\nServicio: {{ $json.body.service || 'No especificado' }}\nOrigen: {{ $json.body.source }}\nFecha: {{ $json.body.receivedAt }}\n\nMensaje / lo que está solicitando:\n{{ $json.body.message }}",
+        "message": "=Nuevo contacto desde el sitio de SarKode.\n\nNombre: {{ $json.body.name }}\nEmail: {{ $json.body.email }}\nTeléfono: {{ $json.body.phone || 'No proporcionado' }}\nServicio: {{ $json.body.service || 'No especificado' }}\nOrigen: {{ $json.body.source }}\nFecha: {{ $json.body.receivedAt }}\n\nMensaje / lo que está solicitando:\n{{ $json.body.message }}",
         "options": {}
       },
       "credentials": {

@@ -26,19 +26,33 @@ Reglas:
 - Sé breve: 2-4 frases por turno. Nunca hagas más de una pregunta a la vez.
 - No inventes ni asumas datos que la persona no te haya dado.
 - Cuando tengas nombre + email + resumen, llama a capture_lead de inmediato.
-- Si capture_lead devuelve un error (por ejemplo, email inválido), discúlpate brevemente y pide el dato correcto sin repetir toda la conversación.
-- Después de que capture_lead se complete con éxito, responde con un mensaje breve y cálido confirmando que el equipo de SarKode se pondrá en contacto pronto.`;
+- Si capture_lead devuelve un error (por ejemplo, email inválido), discúlpate brevemente y pide el dato correcto sin repetir toda la conversación.`;
+
+const POST_CAPTURE_WITH_SCHEDULING = `
+- Después de que capture_lead se complete con éxito, agradece brevemente y pregúntale si prefiere (a) que le agendes una llamada de 30 minutos para una atención más personalizada, o (b) que el equipo se ponga en contacto con ella/él directamente por teléfono.
+- Si elige que la/lo contacten por teléfono, pídele su número y, en cuanto lo tengas, llama a save_phone_number con su nombre, email y teléfono.
+- Si elige agendar una llamada, sigue las instrucciones de "agendar llamada" de más abajo, usando el nombre y el email que ya tienes (no se los vuelvas a pedir).
+- Si save_phone_number devuelve un error, discúlpate brevemente y pide el dato correcto sin repetir toda la conversación.
+- Después de que save_phone_number se complete con éxito, confirma con un mensaje breve y cálido que el equipo se pondrá en contacto pronto al número que dio.`;
+
+const POST_CAPTURE_WITHOUT_SCHEDULING = `
+- Después de que capture_lead se complete con éxito, agradece brevemente y pregúntale si quiere compartir un número de teléfono para que el equipo se ponga en contacto más rápido (es opcional).
+- Si te da un número, llama a save_phone_number con su nombre, email y teléfono.
+- Si save_phone_number devuelve un error, discúlpate brevemente y pide el dato correcto sin repetir toda la conversación.
+- Después de que save_phone_number se complete con éxito, confirma con un mensaje breve y cálido que el equipo se pondrá en contacto pronto al número que dio.
+- Si no comparte teléfono, responde con un mensaje breve y cálido confirmando que el equipo de SarKode se pondrá en contacto pronto por email.`;
 
 const SCHEDULING_SYSTEM_PROMPT = `
 
-Además, si la persona quiere agendar o reservar una llamada (dice cosas como "agendar una llamada", "quiero una reunión", "reservar 30 minutos", etc.) en vez de solo dejar sus datos:
+Además, si la persona quiere agendar o reservar una llamada (dice cosas como "agendar una llamada", "quiero una reunión", "reservar 30 minutos", etc., ya sea desde el inicio o porque eligió esa opción después de capture_lead) en vez de solo dejar sus datos o de que la contacten por teléfono:
 - Pídele su nombre y su email (si no los tiene ya en la conversación).
 - Llama a la función schedule_call con esos datos — el sistema elegirá automáticamente un horario disponible de 30 minutos según la disponibilidad real del calendario del equipo, así que no le pidas que elija día u hora.
 - Cuando schedule_call responda con éxito, confirma la llamada mencionando el día y la hora exactos que devolvió la función, y avisa que recibirá una invitación de calendario por email con un enlace de Google Meet.
 - Si schedule_call falla, discúlpate y sugiere escribir a sofimh1197@gmail.com como alternativa.
 - No llames a capture_lead y a schedule_call para la misma solicitud — si agenda una llamada, con schedule_call es suficiente.`;
 
-export const SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + (SCHEDULING_ENABLED ? SCHEDULING_SYSTEM_PROMPT : '');
+export const SYSTEM_PROMPT =
+  BASE_SYSTEM_PROMPT + (SCHEDULING_ENABLED ? POST_CAPTURE_WITH_SCHEDULING + SCHEDULING_SYSTEM_PROMPT : POST_CAPTURE_WITHOUT_SCHEDULING);
 
 export const CAPTURE_LEAD_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: 'function',
@@ -67,6 +81,25 @@ export const CAPTURE_LEAD_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   },
 };
 
+export const SAVE_PHONE_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: 'save_phone_number',
+    description:
+      'Guarda el número de teléfono de un contacto que ya fue registrado con capture_lead, para cuando prefiere que el equipo de SarKode se comunique con él/ella directamente en vez de (o además de) agendar una llamada. Llámala solo cuando ya tengas su nombre, su email, y el número de teléfono que compartió.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Nombre de la persona.' },
+        email: { type: 'string', description: 'Email de la persona, con formato válido (usuario@dominio.tld).' },
+        phone: { type: 'string', description: 'Número de teléfono que la persona compartió, tal como lo escribió.' },
+      },
+      required: ['name', 'email', 'phone'],
+      additionalProperties: false,
+    },
+  },
+};
+
 export const SCHEDULE_CALL_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: 'function',
   function: {
@@ -87,5 +120,7 @@ export const SCHEDULE_CALL_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
 
 /** The tool set offered to the model — scheduling is only included when the n8n webhook is configured. */
 export function getTools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
-  return SCHEDULING_ENABLED ? [CAPTURE_LEAD_TOOL, SCHEDULE_CALL_TOOL] : [CAPTURE_LEAD_TOOL];
+  const tools = [CAPTURE_LEAD_TOOL, SAVE_PHONE_TOOL];
+  if (SCHEDULING_ENABLED) tools.push(SCHEDULE_CALL_TOOL);
+  return tools;
 }

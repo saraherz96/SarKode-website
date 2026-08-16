@@ -32,6 +32,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
   const [error, setError] = useState<string | null>(null);
   const [lead, setLead] = useState<CapturedLead | null>(null);
   const [call, setCall] = useState<ScheduledCall | null>(null);
+  const [phoneSaved, setPhoneSaved] = useState<string | null>(null);
   // Identifies this chat session so the backend can save/append the full transcript in Supabase.
   const [conversationId, setConversationId] = useState<string>(() => crypto.randomUUID());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -61,6 +62,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
       setError(null);
       setLead(null);
       setCall(null);
+      setPhoneSaved(null);
       setConversationId(crypto.randomUUID());
       setSchedOpen(false);
       setSchedSlots(null);
@@ -168,6 +170,9 @@ export default function ContactModal({ open, services, preselectedService, onClo
       }
       if (data.callScheduled) {
         setCall(data.callScheduled as ScheduledCall);
+      }
+      if (data.phoneSaved) {
+        setPhoneSaved(data.phoneSaved as string);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo contactar al asistente.');
@@ -458,9 +463,14 @@ export default function ContactModal({ open, services, preselectedService, onClo
                 Escribiendo…
               </div>
             )}
-            {lead && !call && (
+            {lead && !call && !phoneSaved && (
               <div style={{ alignSelf: 'center', fontSize: 11, color: '#A8C7F0', textAlign: 'center', padding: '4px 10px' }}>
                 ✓ Contacto registrado — te escribiremos a {lead.email}
+              </div>
+            )}
+            {phoneSaved && !call && (
+              <div style={{ alignSelf: 'center', fontSize: 11, color: '#A8C7F0', textAlign: 'center', padding: '4px 10px' }}>
+                ✓ Teléfono guardado — te contactaremos al {phoneSaved}
               </div>
             )}
             {call && (

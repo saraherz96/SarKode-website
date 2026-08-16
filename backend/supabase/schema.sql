@@ -11,6 +11,9 @@ create table if not exists public.leads (
   email text not null,
   message text not null,
   service text,
+  -- Teléfono opcional: se llena cuando, en el chat, la persona prefiere que el equipo
+  -- se comunique con ella en vez de agendar una llamada.
+  phone text,
   source text not null check (source in ('form', 'chat', 'schedule-link')),
   -- Campo de seguimiento: se actualiza a mano desde el Table Editor de Supabase
   -- a medida que se contacta al cliente.
@@ -32,6 +35,10 @@ create table if not exists public.conversations (
 );
 
 create index if not exists conversations_lead_id_idx on public.conversations (lead_id);
+
+-- Si ya habías corrido este archivo antes (la tabla leads ya existía sin la columna
+-- phone), esta línea la agrega sin romper nada. Es segura de correr las veces que sea.
+alter table public.leads add column if not exists phone text;
 
 -- RLS activado y sin policies: nadie puede leer/escribir estas tablas salvo el
 -- backend, que usa la service_role key (esa key ignora RLS por diseño). El

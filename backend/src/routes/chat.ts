@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import OpenAI from 'openai';
 import { openai, CHAT_MODEL, SYSTEM_PROMPT, getTools } from '../agent';
-import { persistLead, upsertConversation, EMAIL_RE, type LeadRecord } from '../store';
+import { persistLead, upsertConversation, attachPhoneToLead, EMAIL_RE, PHONE_RE, type LeadRecord } from '../store';
 import { requestAvailability, confirmSlot } from '../scheduling';
 
 const router = Router();
@@ -21,6 +21,12 @@ interface CaptureLeadInput {
 interface ScheduleCallInput {
   name: string;
   email: string;
+}
+
+interface SavePhoneInput {
+  name: string;
+  email: string;
+  phone: string;
 }
 
 interface CallScheduled {
@@ -74,6 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
     let message = completion.choices[0].message;
     let lead: LeadRecord | null = null;
     let callScheduled: CallScheduled | null = null;
+    let phoneSaved: string | null = null;
     let conversationLeadId: string | null = null;
 
     // At most one round of tool calls per request. The model may request multiple
@@ -151,6 +158,36 @@ router.post('/', async (req: Request, res: Response) => {
               content: 'Error: no se pudo agendar la llamada automáticamente. Discúlpate y sugiere escribir a sofimh1197@gmail.com.',
             });
           }
+        } else if (name === 'save_phone_number') {
+          const input = parseToolArgs<SavePhoneInput>(rawArgs);
+          const email = (input?.email || '').trim();
+          const phone = (input?.phone || '').trim();
+          if (!input || !EMAIL_RE.test(email) || !input.name?.trim() || !PHONE_RE.test(phone)) {
+            history.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Error: el nombre, el email o el teléfono no son válidos. Pide el dato correcto antes de reintentar.',
+            });
+            continue;
+          }
+          try {
+            const updated = await attachPhoneToLead({ name: input.name.trim(), email, phone });
+            phoneSaved = phone;
+            if (updated) conversationLeadId = updated.id;
+            console.info(`[chat] teléfono guardado para ${input.name.trim()} <${email}>: ${phone}`);
+            history.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Teléfono guardado correctamente. El equipo de SarKode se pondrá en contacto pronto.',
+            });
+          } catch (err) {
+            console.error('[chat] error guardando teléfono:', err);
+            history.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Error: no se pudo guardar el teléfono. Discúlpate y sugiere escribir a sofimh1197@gmail.com.',
+            });
+          }
         } else {
           history.push({
             role: 'tool',
@@ -181,6 +218,7 @@ router.post('/', async (req: Request, res: Response) => {
       reply,
       leadCaptured: lead ? { name: lead.name, email: lead.email, service: lead.service } : null,
       callScheduled,
+      phoneSaved,
     });
   } catch (err) {
     if (err instanceof OpenAI.AuthenticationError) {
