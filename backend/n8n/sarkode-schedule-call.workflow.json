@@ -10,7 +10,7 @@
       "parameters": {
         "width": 560,
         "height": 380,
-        "content": "## Setup\n1. Abre los 2 nodos **Google Calendar** y en el campo *Credential* selecciona (o crea) `Google Calendar OAuth2` autorizando con **sofimh1197@gmail.com**.\n2. Revisa el Code node **Listar horarios disponibles**: ajusta `TIMEZONE`, `WORK_START_HOUR`, `WORK_END_HOUR` si hace falta.\n3. En el nodo **Crear evento**, el campo *Conference Data* ya está configurado para crear un enlace de **Google Meet** automáticamente en cada llamada agendada.\n4. Activa el workflow (toggle arriba a la derecha).\n5. Copia la **Production URL** del nodo Webhook y pégala en `backend/.env` como `N8N_SCHEDULE_WEBHOOK_URL`.\n\n## Cómo funciona\nUn mismo webhook maneja dos casos, según si el body trae `start` o no:\n- **Sin `start`** → busca disponibilidad en el calendario y devuelve una **lista** de horarios libres (`{success:true, slots:[...]}`). No agenda nada.\n- **Con `start`/`end`/`name`/`email`** (el horario que la persona eligió, ya con sus datos) → crea el evento con Google Meet en ese horario e invita a `email`, y responde `{success:true}`.\n\nEl frontend primero pide la lista de horarios (sin datos personales), y una vez elegido el día y la hora, pide nombre/correo y llama de nuevo con `start`/`end` para confirmar."
+        "content": "## Setup\n1. Abre el nodo **Disponibilidad** (Google Calendar) y en el campo *Credential* selecciona (o crea) `Google Calendar OAuth2` autorizando con **sofimh1197@gmail.com**.\n2. Abre el nodo **Crear evento** (HTTP Request) y en *Credential* selecciona esa misma credencial `Google Calendar OAuth2` — el nodo llama directo a la API de Google Calendar con `conferenceDataVersion=1` para garantizar que siempre se genere el enlace de **Google Meet** (el nodo nativo de Google Calendar de n8n no siempre lo agrega de forma confiable).\n3. Revisa el Code node **Listar horarios disponibles**: ajusta `TIMEZONE`, `WORK_START_HOUR`, `WORK_END_HOUR` si hace falta.\n4. Activa el workflow (toggle arriba a la derecha).\n5. Copia la **Production URL** del nodo Webhook y pégala en `backend/.env` como `N8N_SCHEDULE_WEBHOOK_URL`.\n\n## Cómo funciona\nUn mismo webhook maneja dos casos, según si el body trae `start` o no:\n- **Sin `start`** → busca disponibilidad en el calendario y devuelve una **lista** de horarios libres (`{success:true, slots:[...]}`). No agenda nada.\n- **Con `start`/`end`/`name`/`email`** (el horario que la persona eligió, ya con sus datos) → crea el evento con Google Meet en ese horario (vía HTTP Request directo a la API, forzando `conferenceDataVersion=1`) e invita a `email`, y responde `{success:true}`.\n\nEl frontend primero pide la lista de horarios (sin datos personales), y una vez elegido el día y la hora, pide nombre/correo y llama de nuevo con `start`/`end` para confirmar."
       }
     },
     {
@@ -99,32 +99,19 @@
     {
       "id": "gcal_create_event",
       "name": "Crear evento",
-      "type": "n8n-nodes-base.googleCalendar",
-      "typeVersion": 1.3,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [480, -140],
+      "notesInFlow": false,
       "parameters": {
-        "resource": "event",
-        "operation": "create",
-        "calendar": {
-          "__rl": true,
-          "mode": "list",
-          "value": "sofimh1197@gmail.com",
-          "cachedResultName": "sofimh1197@gmail.com"
-        },
-        "start": "={{ $json.body.start }}",
-        "end": "={{ $json.body.end }}",
-        "useDefaultReminders": true,
-        "additionalFields": {
-          "summary": "–Follow up – SarKode",
-          "description": "=Llamada agendada automáticamente vía el asistente de SarKode.\nCliente: {{ $json.body.name }}\nEmail: {{ $json.body.email }}",
-          "attendees": "={{ [ $json.body.email ] }}",
-          "sendUpdates": "all",
-          "conferenceDataUi": {
-            "conferenceDataValues": {
-              "conferenceSolution": "hangoutsMeet"
-            }
-          }
-        }
+        "method": "POST",
+        "url": "=https://www.googleapis.com/calendar/v3/calendars/{{ encodeURIComponent('sofimh1197@gmail.com') }}/events?conferenceDataVersion=1&sendUpdates=all",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"summary\": \"Follow up – SarKode\",\n  \"description\": \"Llamada agendada automáticamente vía el asistente de SarKode.\\nCliente: {{ $json.body.name }}\\nEmail: {{ $json.body.email }}\",\n  \"start\": { \"dateTime\": \"{{ $json.body.start }}\" },\n  \"end\": { \"dateTime\": \"{{ $json.body.end }}\" },\n  \"attendees\": [ { \"email\": \"{{ $json.body.email }}\" } ],\n  \"conferenceData\": {\n    \"createRequest\": {\n      \"requestId\": \"{{ $json.body.start }}-{{ Date.now() }}\",\n      \"conferenceSolutionKey\": { \"type\": \"hangoutsMeet\" }\n    }\n  }\n}",
+        "options": {}
       },
       "credentials": {
         "googleCalendarOAuth2Api": {
