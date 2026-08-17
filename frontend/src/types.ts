@@ -31,4 +31,6 @@ export interface ScheduledCall {
   humanLabel: string;
   start: string;
   end: string;
+  /** Only present once the call is confirmed, when n8n returns the Google Meet link. */
+  meetLink?: string | null;
 }

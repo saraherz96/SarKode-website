@@ -8,6 +8,8 @@ export interface ScheduleCallResult {
   success: boolean;
   start: string;
   end: string;
+  /** Google Meet link for the booked call, when the n8n workflow returns one. */
+  meetLink: string | null;
 }
 
 /** Posts to the n8n workflow. Presence of `start`/`end` in the body tells the workflow whether
@@ -42,11 +44,23 @@ export async function requestAvailability(): Promise<SlotOption[]> {
   return data.slots as SlotOption[];
 }
 
-/** Step 2: book the slot the person chose from the list returned by requestAvailability. */
-export async function confirmSlot(name: string, email: string, start: string, end: string): Promise<ScheduleCallResult> {
-  const data = await callWebhook({ name, email, start, end });
+/** Step 2: book the slot the person chose from the list returned by requestAvailability.
+ * `message` is what the person says they need/want to build, and `service` is the SarKode
+ * service it maps to (if known) — both are forwarded to n8n so they end up in the calendar
+ * event's description, and are returned here so the caller can include them (plus the Meet
+ * link n8n sends back) in the lead notification email. */
+export async function confirmSlot(
+  name: string,
+  email: string,
+  start: string,
+  end: string,
+  message: string,
+  service: string | null,
+): Promise<ScheduleCallResult> {
+  const data = await callWebhook({ name, email, start, end, message, service });
   if (data.success !== true) {
     throw new Error('n8n no confirmó la reserva.');
   }
-  return { success: true, start, end };
+  const meetLink = typeof data.meetLink === 'string' && data.meetLink.trim() ? data.meetLink.trim() : null;
+  return { success: true, start, end, meetLink };
 }

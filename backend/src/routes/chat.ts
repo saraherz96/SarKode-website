@@ -21,6 +21,8 @@ interface CaptureLeadInput {
 interface ScheduleCallInput {
   name: string;
   email: string;
+  summary: string;
+  service: string;
 }
 
 interface SavePhoneInput {
@@ -120,11 +122,11 @@ router.post('/', async (req: Request, res: Response) => {
         } else if (name === 'schedule_call') {
           const input = parseToolArgs<ScheduleCallInput>(rawArgs);
           const email = (input?.email || '').trim();
-          if (!input || !EMAIL_RE.test(email) || !input.name?.trim()) {
+          if (!input || !EMAIL_RE.test(email) || !input.name?.trim() || !input.summary?.trim()) {
             history.push({
               role: 'tool',
               tool_call_id: toolCall.id,
-              content: 'Error: el nombre o el email no son válidos. Pide el dato correcto antes de reintentar.',
+              content: 'Error: el nombre, el email o el resumen de lo que necesita no son válidos. Pide el dato correcto antes de reintentar.',
             });
             continue;
           }
@@ -134,13 +136,15 @@ router.post('/', async (req: Request, res: Response) => {
             const slots = await requestAvailability();
             if (slots.length === 0) throw new Error('No hay horarios disponibles en los próximos días.');
             const chosen = slots[0];
-            await confirmSlot(input.name.trim(), email, chosen.start, chosen.end);
+            const summary = input.summary.trim();
+            const service = input.service?.trim() || null;
+            const { meetLink } = await confirmSlot(input.name.trim(), email, chosen.start, chosen.end, summary, service);
             callScheduled = { humanLabel: chosen.humanLabel, start: chosen.start, end: chosen.end };
             const callLead = await persistLead({
               name: input.name.trim(),
               email,
-              message: `Llamada de 30 min agendada para ${chosen.humanLabel}.`,
-              service: null,
+              message: `${summary}\n\nLlamada de 30 min agendada para ${chosen.humanLabel}.${meetLink ? `\nEnlace de Google Meet: ${meetLink}` : ''}`,
+              service,
               source: 'chat',
             });
             conversationLeadId = callLead.id;

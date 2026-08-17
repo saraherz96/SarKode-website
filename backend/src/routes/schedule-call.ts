@@ -40,18 +40,28 @@ router.post('/confirm', async (req: Request, res: Response) => {
   const valid = validateNameEmail(req, res);
   if (!valid) return;
 
-  const { start, end } = (req.body ?? {}) as { start?: unknown; end?: unknown };
+  const { start, end, message, service } = (req.body ?? {}) as {
+    start?: unknown;
+    end?: unknown;
+    message?: unknown;
+    service?: unknown;
+  };
   if (typeof start !== 'string' || !start.trim() || typeof end !== 'string' || !end.trim()) {
     return res.status(400).json({ error: 'Falta el horario elegido.' });
   }
+  if (typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ error: 'Cuéntanos brevemente qué necesitas construir.' });
+  }
+  const need = message.trim();
+  const serviceValue = typeof service === 'string' && service.trim() ? service.trim() : null;
 
   try {
-    const result = await confirmSlot(valid.name, valid.email, start.trim(), end.trim());
+    const result = await confirmSlot(valid.name, valid.email, start.trim(), end.trim(), need, serviceValue);
     await persistLead({
       name: valid.name,
       email: valid.email,
-      message: `Llamada de 30 min agendada para ${start.trim()}.`,
-      service: null,
+      message: `${need}\n\nLlamada de 30 min agendada para ${start.trim()}.${result.meetLink ? `\nEnlace de Google Meet: ${result.meetLink}` : ''}`,
+      service: serviceValue,
       source: 'schedule-link',
     });
     console.info(`[schedule-call] llamada agendada para ${valid.name} <${valid.email}>: ${start.trim()}`);

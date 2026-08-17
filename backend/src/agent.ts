@@ -45,7 +45,7 @@ const POST_CAPTURE_WITHOUT_SCHEDULING = `
 const SCHEDULING_SYSTEM_PROMPT = `
 
 Además, si la persona quiere agendar o reservar una llamada (dice cosas como "agendar una llamada", "quiero una reunión", "reservar 30 minutos", etc., ya sea desde el inicio o porque eligió esa opción después de capture_lead) en vez de solo dejar sus datos o de que la contacten por teléfono:
-- Pídele su nombre y su email (si no los tiene ya en la conversación).
+- Pídele su nombre, su email y un resumen breve de lo que necesita construir o resolver (si no los tienes ya en la conversación, por ejemplo porque ya pasó por capture_lead).
 - Llama a la función schedule_call con esos datos — el sistema elegirá automáticamente un horario disponible de 30 minutos según la disponibilidad real del calendario del equipo, así que no le pidas que elija día u hora.
 - Cuando schedule_call responda con éxito, confirma la llamada mencionando el día y la hora exactos que devolvió la función, y avisa que recibirá una invitación de calendario por email con un enlace de Google Meet.
 - Si schedule_call falla, discúlpate y sugiere escribir a sofimh1197@gmail.com como alternativa.
@@ -105,14 +105,23 @@ export const SCHEDULE_CALL_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   function: {
     name: 'schedule_call',
     description:
-      'Agenda una llamada de 30 minutos con el equipo de SarKode. El sistema busca automáticamente el próximo horario disponible en el calendario del equipo — no le preguntes a la persona qué día u hora prefiere. Llámala solo cuando ya tengas su nombre y su email, y haya confirmado que quiere agendar una llamada.',
+      'Agenda una llamada de 30 minutos con el equipo de SarKode. El sistema busca automáticamente el próximo horario disponible en el calendario del equipo — no le preguntes a la persona qué día u hora prefiere. Llámala solo cuando ya tengas su nombre, su email y un resumen de lo que necesita, y haya confirmado que quiere agendar una llamada.',
     parameters: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Nombre de la persona que agenda la llamada.' },
         email: { type: 'string', description: 'Email de la persona, con formato válido (usuario@dominio.tld).' },
+        summary: {
+          type: 'string',
+          description: 'Resumen conciso, en español, de lo que la persona necesita construir o resolver.',
+        },
+        service: {
+          type: 'string',
+          enum: ['AI Agents', 'Automatización', 'Productos', 'UX/UI Design', 'No especificado'],
+          description: 'El servicio de SarKode que mejor corresponde a su necesidad.',
+        },
       },
-      required: ['name', 'email'],
+      required: ['name', 'email', 'summary', 'service'],
       additionalProperties: false,
     },
   },

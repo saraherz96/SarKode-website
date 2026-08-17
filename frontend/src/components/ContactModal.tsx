@@ -46,6 +46,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
   const [schedLoadError, setSchedLoadError] = useState<string | null>(null);
   const [schedSelectedDay, setSchedSelectedDay] = useState<string | null>(null);
   const [schedSelectedSlot, setSchedSelectedSlot] = useState<ScheduledCall | null>(null);
+  const [schedMessage, setSchedMessage] = useState('');
   const [schedName, setSchedName] = useState('');
   const [schedEmail, setSchedEmail] = useState('');
   const [schedStatus, setSchedStatus] = useState<'idle' | 'confirming' | 'error'>('idle');
@@ -70,6 +71,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
       setSchedLoadError(null);
       setSchedSelectedDay(null);
       setSchedSelectedSlot(null);
+      setSchedMessage('');
       setSchedName('');
       setSchedEmail('');
       setSchedStatus('idle');
@@ -115,22 +117,33 @@ export default function ContactModal({ open, services, preselectedService, onClo
     else schedDayGroups.push({ day, slots: [slot] });
   }
 
+  // Which service the scheduled call is about — the same pill selection used for the chat panel,
+  // so choosing a pill (or "Otro") before/while booking carries through to the confirmation email.
+  const schedServiceValue = otroActive ? 'Otro' : selectedServiceTitle;
+
   async function confirmBooking(e: FormEvent) {
     e.preventDefault();
-    if (!schedSelectedSlot || !schedName.trim() || !schedEmail.trim() || schedStatus === 'confirming') return;
+    if (!schedSelectedSlot || !schedMessage.trim() || !schedName.trim() || !schedEmail.trim() || schedStatus === 'confirming') return;
     setSchedStatus('confirming');
     setSchedError(null);
     try {
       const res = await fetch(`${API_URL}/api/schedule-call/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: schedName.trim(), email: schedEmail.trim(), start: schedSelectedSlot.start, end: schedSelectedSlot.end }),
+        body: JSON.stringify({
+          name: schedName.trim(),
+          email: schedEmail.trim(),
+          start: schedSelectedSlot.start,
+          end: schedSelectedSlot.end,
+          message: schedMessage.trim(),
+          service: schedServiceValue,
+        }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.success) {
         throw new Error(data?.error || `Error ${res.status}`);
       }
-      setSchedResult(schedSelectedSlot);
+      setSchedResult({ ...schedSelectedSlot, meetLink: data.meetLink ?? null });
       setSchedStatus('idle');
     } catch (err) {
       setSchedStatus('error');
@@ -294,11 +307,26 @@ export default function ContactModal({ open, services, preselectedService, onClo
                     <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
                       Te llegará una invitación con enlace de Google Meet a {schedEmail}.
                     </div>
+                    {schedResult.meetLink && (
+                      <a href={schedResult.meetLink} target="_blank" rel="noreferrer" className="sk-footer-link" style={{ fontSize: 12 }}>
+                        Ver enlace de Google Meet →
+                      </a>
+                    )}
                   </div>
                 ) : schedSelectedSlot ? (
-                  // Step 3: name + email, then confirm the chosen day/hour.
+                  // Step 3: what they need + name + email, then confirm the chosen day/hour.
                   <form onSubmit={confirmBooking} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
                     <div style={{ color: '#F6F1EC', fontSize: 12.5 }}>{schedSelectedSlot.humanLabel}</div>
+                    <textarea
+                      placeholder="Cuéntanos qué necesitas construir…"
+                      value={schedMessage}
+                      onChange={(e) => setSchedMessage(e.target.value)}
+                      className="sk-input"
+                      rows={2}
+                      style={{ padding: '9px 12px', fontSize: 13, resize: 'none' }}
+                      autoFocus
+                      required
+                    />
                     <input
                       type="text"
                       placeholder="Tu nombre"
@@ -306,7 +334,6 @@ export default function ContactModal({ open, services, preselectedService, onClo
                       onChange={(e) => setSchedName(e.target.value)}
                       className="sk-input"
                       style={{ padding: '9px 12px', fontSize: 13 }}
-                      autoFocus
                       required
                     />
                     <input
@@ -322,7 +349,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
                         type="submit"
-                        disabled={schedStatus === 'confirming' || !schedName.trim() || !schedEmail.trim()}
+                        disabled={schedStatus === 'confirming' || !schedMessage.trim() || !schedName.trim() || !schedEmail.trim()}
                         className="sk-btn-primary"
                         style={{ border: 'none', padding: '8px 16px', fontSize: 12.5 }}
                       >
