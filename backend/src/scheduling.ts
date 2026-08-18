@@ -10,6 +10,10 @@ export interface ScheduleCallResult {
   end: string;
   /** Google Meet link for the booked call, when the n8n workflow returns one. */
   meetLink: string | null;
+  /** Google Calendar event ID for the booked call, when the n8n workflow returns one (see
+   * backend/n8n/sarkode-schedule-call.workflow.json — "Responder confirmación" node). Used to
+   * store the appointment in the CRM (backend/src/crm/appointments.ts). */
+  eventId: string | null;
 }
 
 /** Posts to the n8n workflow. Presence of `start`/`end` in the body tells the workflow whether
@@ -62,5 +66,6 @@ export async function confirmSlot(
     throw new Error('n8n no confirmó la reserva.');
   }
   const meetLink = typeof data.meetLink === 'string' && data.meetLink.trim() ? data.meetLink.trim() : null;
-  return { success: true, start, end, meetLink };
+  const eventId = typeof data.eventId === 'string' && data.eventId.trim() ? data.eventId.trim() : null;
+  return { success: true, start, end, meetLink, eventId };
 }

@@ -197,16 +197,87 @@ contacto y lo que está solicitando, para poder darle seguimiento.
 Sin esta variable, los leads se guardan igual — simplemente no llega el
 correo de aviso.
 
+### Habilitar el recordatorio de llamada, 2 horas antes (n8n + Gmail)
+
+Un workflow de n8n aparte, sin conexión con el backend (corre solo, con un
+Schedule Trigger cada 10 minutos — no necesita ninguna variable en
+`backend/.env`), revisa las citas agendadas (`appointments` en Supabase) y,
+2 horas antes de cada una, manda dos correos: uno a
+**sofimh1197@gmail.com** con los datos del cliente y la llamada, y un
+recordatorio amistoso al **cliente** con el horario y el link de Google
+Meet.
+
+**Setup (una sola vez), en tu instancia de n8n:**
+
+1. Corre `backend/supabase/migrations/007_crm_appointment_reminders.sql` en
+   el SQL Editor de Supabase (agrega la columna que evita mandar el mismo
+   recordatorio dos veces).
+2. Importa `backend/n8n/sarkode-appointment-reminder.workflow.json` en n8n.
+3. Abre los nodos **Buscar citas por recordar** y **Marcar recordatorio
+   enviado** (HTTP Request) y en cada uno reemplaza
+   `REPLACE_WITH_YOUR_SUPABASE_PROJECT_REF` en la URL y
+   `REPLACE_WITH_YOUR_SUPABASE_SERVICE_ROLE_KEY` en los headers `apikey` y
+   `Authorization`, con los mismos valores de `SUPABASE_URL` /
+   `SUPABASE_SERVICE_ROLE_KEY` de `backend/.env`.
+4. Abre los nodos **Recordatorio interno a SarKode** y **Recordatorio al
+   cliente** (Gmail) y en *Credential* selecciona la misma `Gmail OAuth2`
+   que ya usas en `sarkode-new-lead-notification` — no hace falta crear una
+   nueva.
+5. Activa el workflow.
+
+Solo aplica a citas agendadas **después** de que actives esto — no manda
+recordatorios retroactivos de citas ya agendadas antes.
+
+## CRM interno (admin/)
+
+Además del sitio público, el repo incluye una app interna (`admin/`, ver su propio
+[README](admin/README.md)) para que el equipo de SarKode administre todo el ciclo comercial de
+cada persona que dejó su correo/teléfono o agendó una llamada: contacto, oportunidad por
+servicio, pipeline (Kanban), citas con el resultado de la llamada, tareas de seguimiento,
+propuestas y pagos (anticipo/parcial/liquidación) con saldo calculado automáticamente.
+
+- **Solo para el equipo**: login con Supabase Auth (email + contraseña); Row Level Security
+  (`backend/supabase/migrations/002_crm_rls.sql`) garantiza que un visitante del sitio público
+  nunca pueda leer contactos, conversaciones, propuestas ni pagos — ni con la key `anon`.
+- **Reutiliza lo que ya existía**: no se tocó `leads` ni `conversations`; el CRM agrega
+  `contacts`, `opportunities`, `appointments`, `activities`, `tasks`, `proposals`, `payments`,
+  `pipeline_history`, `services`, `messages` y `team_members` encima, y trae los leads que ya
+  habían llegado (`004_crm_backfill.sql`).
+- **Setup**: corre las migraciones en orden (ver
+  [`backend/supabase/migrations/README.md`](backend/supabase/migrations/README.md)), da de alta
+  a cada persona del equipo en `team_members`, configura `admin/.env` (`VITE_SUPABASE_URL` +
+  `VITE_SUPABASE_ANON_KEY` — nunca la `service_role`) y corre `npm run dev -w admin`.
+- El backend (`backend/src/crm/`) alimenta el CRM automáticamente desde los 3 flujos públicos ya
+  existentes — formulario, chat, y agendar llamada — deduplicando contactos por email/teléfono,
+  sin cambiar el comportamiento que ya tenían esos endpoints.
+
+## Pruebas
+
+```bash
+npm run test          # desde la raíz — corre backend/src/__tests__ (vitest)
+```
+
+Cubre: deduplicación de contactos, creación de oportunidades desde el formulario y desde
+agendar llamada, guardado de mensajes individuales, cambio de etapa vía la función transaccional,
+validación de las rutas públicas, manejo de errores de n8n/Calendar, y una prueba estática que
+falla si alguna tabla del CRM se queda sin Row Level Security. Las pruebas nunca tocan Supabase,
+n8n ni OpenAI reales (ver `backend/src/__tests__/setup.ts` y `fakeSupabase.ts`). Lo único que no
+se puede probar sin una instancia real de Postgres es RLS "en caliente" (queda cubierto solo
+estáticamente) — ver la nota en `backend/src/__tests__/migrations.rls.test.ts`.
+
 ## Build de producción
 
 ```bash
 cd backend && npm run build && npm start     # sirve la API en :4000
-cd frontend && npm run build                  # genera frontend/dist (estático)
+cd frontend && npm run build                  # genera frontend/dist (estático, sitio público)
+cd admin && npm run build                     # genera admin/dist (estático, CRM interno)
 ```
 
-`frontend/dist` es un sitio estático: puede desplegarse en cualquier CDN
-(Vercel, Netlify, S3, etc.) siempre que `VITE_API_URL` apunte al backend
-desplegado.
+`frontend/dist` y `admin/dist` son sitios estáticos independientes: cada uno puede desplegarse en
+cualquier CDN (Cloudflare Pages, Vercel, Netlify, S3, etc.) — `frontend` con `VITE_API_URL`
+apuntando al backend desplegado, `admin` con `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`. Se
+recomienda desplegarlos en dominios/subdominios distintos (p.ej. `sarkode.com` y
+`admin.sarkode.com`) para no mezclar el sitio público con la herramienta interna.
 
 ## Estructura
 
@@ -225,17 +296,38 @@ backend/
     agent.ts              system prompt + tools (capture_lead, schedule_call) + cliente OpenAI
     scheduling.ts           llama al webhook de n8n para agendar la llamada
     supabase.ts              cliente de Supabase (null si no está configurado)
-    store.ts                persistencia de leads y conversaciones (Supabase, con
+    store.ts                persistencia de leads/conversaciones/mensajes (Supabase, con
                              respaldo en contacts.jsonl) + aviso por correo al guardar un lead
+    crm/                    capa de servicios del CRM — contacts.ts, opportunities.ts,
+                             appointments.ts, activities.ts, tasks.ts, services.ts (deduplica
+                             contactos y alimenta el CRM desde los 3 flujos públicos)
     routes/contact.ts     POST /api/contact (formulario clásico)
     routes/chat.ts         POST /api/chat (agente conversacional)
     routes/schedule-call.ts POST /api/schedule-call (agendar directo, sin IA)
-    index.ts                servidor Express (cors, json, /health)
+    index.ts                servidor Express (cors, json, /health) — exporta `app` para pruebas
+    __tests__/               pruebas (vitest) — ver "Pruebas" arriba
   supabase/
     schema.sql               tablas `leads` y `conversations` — pegar en el SQL Editor de Supabase
+    migrations/               módulo de CRM (contacts, opportunities, appointments, etc.) — ver
+                               backend/supabase/migrations/README.md
   n8n/
     sarkode-schedule-call.workflow.json          workflow importable: disponibilidad → crear evento
+                                                  (responde meetLink + eventId)
     sarkode-new-lead-notification.workflow.json  workflow importable: aviso por Gmail al guardar un lead
+    sarkode-appointment-reminder.workflow.json   workflow importable: recordatorio 2h antes de cada
+                                                  llamada, por Gmail, a sofimh1197@gmail.com y al cliente
+
+admin/
+  src/
+    lib/                    cliente de Supabase (key anon) + AuthProvider/useAuth
+    services/                capa de repositorios — un archivo por entidad del CRM, toda la
+                              lectura/escritura a Supabase pasa por aquí (nada de queries sueltas
+                              en los componentes)
+    types/crm.ts              tipos TypeScript del esquema del CRM
+    components/               Layout, ProtectedRoute, badges de estado, pestañas del detalle
+                              de contacto (Oportunidades, Citas, Conversaciones, Tareas, etc.)
+    pages/                    Dashboard, Pipeline (Kanban), Contactos, Citas, Conversaciones,
+                              Tareas, Propuestas, Pagos, Automatizaciones
 ```
 
 ## Notas de la migración
@@ -255,6 +347,13 @@ backend/
 - Las 4 tarjetas de servicios en la sección "Qué hacemos" ahora abren el
   modal de servicios al hacer click (en el original los handlers existían
   en la lógica pero no estaban conectados a ningún elemento).
+- Se agregó el **CRM interno** (`admin/`, ver arriba) — sin quitar ni renombrar nada de lo que ya
+  funcionaba. El único cambio operativo en algo ya desplegado es el nodo **"Responder
+  confirmación"** del workflow `sarkode-schedule-call` de n8n, que ahora también devuelve
+  `eventId` (antes solo `meetLink`) para poder guardar la cita en el CRM — si ya tenías ese
+  workflow importado en tu instancia de n8n, vuelve a importar
+  `backend/n8n/sarkode-schedule-call.workflow.json` (o pega manualmente el nuevo
+  `responseBody` en ese nodo) para que el `eventId` empiece a llegar.
 - Todo el resto de la interacción (navbar que se compacta al hacer scroll,
   parallax del video del hero, animación de aparición palabra por palabra
   del heading, flip-cards con hover, cierre de modales con Esc, bloqueo de

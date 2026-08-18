@@ -1,8 +1,9 @@
 import { Router, type Request, type Response } from 'express';
 import OpenAI from 'openai';
 import { openai, CHAT_MODEL, SYSTEM_PROMPT, getTools } from '../agent';
-import { persistLead, upsertConversation, attachPhoneToLead, EMAIL_RE, PHONE_RE, type LeadRecord } from '../store';
+import { persistLead, upsertConversation, appendMessages, attachPhoneToLead, EMAIL_RE, PHONE_RE, type LeadRecord } from '../store';
 import { requestAvailability, confirmSlot } from '../scheduling';
+import { onContactRequest, onCallScheduled } from '../crm';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ interface CaptureLeadInput {
   email: string;
   summary: string;
   service: string;
+  company?: string;
 }
 
 interface ScheduleCallInput {
@@ -23,6 +25,7 @@ interface ScheduleCallInput {
   email: string;
   summary: string;
   service: string;
+  company?: string;
 }
 
 interface SavePhoneInput {
@@ -107,6 +110,17 @@ router.post('/', async (req: Request, res: Response) => {
             });
             conversationLeadId = lead.id;
             console.info(`[chat] lead capturado: ${lead.name} <${lead.email}>${lead.service ? ` (${lead.service})` : ''}`);
+            void onContactRequest({
+              fullName: lead.name,
+              email: lead.email,
+              phone: lead.phone,
+              companyName: input.company?.trim() || null,
+              service: lead.service,
+              message: lead.message,
+              source: 'chat',
+              leadId: lead.id,
+              conversationId: convoId,
+            });
             history.push({
               role: 'tool',
               tool_call_id: toolCall.id,
@@ -138,7 +152,7 @@ router.post('/', async (req: Request, res: Response) => {
             const chosen = slots[0];
             const summary = input.summary.trim();
             const service = input.service?.trim() || null;
-            const { meetLink } = await confirmSlot(input.name.trim(), email, chosen.start, chosen.end, summary, service);
+            const { meetLink, eventId } = await confirmSlot(input.name.trim(), email, chosen.start, chosen.end, summary, service);
             callScheduled = { humanLabel: chosen.humanLabel, start: chosen.start, end: chosen.end };
             const callLead = await persistLead({
               name: input.name.trim(),
@@ -149,6 +163,19 @@ router.post('/', async (req: Request, res: Response) => {
             });
             conversationLeadId = callLead.id;
             console.info(`[chat] llamada agendada para ${input.name.trim()} <${email}>: ${chosen.humanLabel}`);
+            void onCallScheduled({
+              fullName: input.name.trim(),
+              email,
+              companyName: input.company?.trim() || null,
+              service,
+              summary,
+              startsAt: chosen.start,
+              endsAt: chosen.end,
+              googleMeetUrl: meetLink,
+              googleCalendarEventId: eventId,
+              leadId: callLead.id,
+              conversationId: convoId,
+            });
             history.push({
               role: 'tool',
               tool_call_id: toolCall.id,
@@ -177,7 +204,19 @@ router.post('/', async (req: Request, res: Response) => {
           try {
             const updated = await attachPhoneToLead({ name: input.name.trim(), email, phone });
             phoneSaved = phone;
-            if (updated) conversationLeadId = updated.id;
+            if (updated) {
+              conversationLeadId = updated.id;
+              void onContactRequest({
+                fullName: updated.name,
+                email: updated.email,
+                phone: updated.phone,
+                service: updated.service,
+                message: updated.message,
+                source: 'phone-preference',
+                leadId: updated.id,
+                conversationId: convoId,
+              });
+            }
             console.info(`[chat] teléfono guardado para ${input.name.trim()} <${email}>: ${phone}`);
             history.push({
               role: 'tool',
@@ -208,14 +247,23 @@ router.post('/', async (req: Request, res: Response) => {
     const reply = message.content?.trim() || 'Gracias por tu mensaje.';
 
     if (convoId) {
+      const lastTurn = messages[messages.length - 1];
+      const newTurns: { role: 'client' | 'ai_agent'; content: string }[] = [];
+      if (lastTurn?.role === 'user') newTurns.push({ role: 'client', content: lastTurn.content });
+      newTurns.push({ role: 'ai_agent', content: reply });
+
+      // Encadenado (no bloquea la respuesta): appendMessages necesita que el renglón de la
+      // conversación ya exista (FK conversations → messages), así que corre después del upsert.
       void upsertConversation({
         id: convoId,
         leadId: conversationLeadId,
         messages: [...messages, { role: 'assistant', content: reply }],
         service: lead?.service ?? null,
-      }).catch((err) => {
-        console.error('[chat] error guardando conversación:', err instanceof Error ? err.message : err);
-      });
+      })
+        .then(() => appendMessages({ conversationId: convoId, turns: newTurns }))
+        .catch((err) => {
+          console.error('[chat] error guardando conversación:', err instanceof Error ? err.message : err);
+        });
     }
 
     return res.json({

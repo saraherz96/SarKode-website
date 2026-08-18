@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+/* Paleta tomada de frontend/src/index.css (fondo oscuro #14141a, acentos morado/rosa/azul
+ * pastel) para que el CRM se sienta parte del mismo sistema visual de SarKode. */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-sk-bg: #14141a;
+  --color-sk-panel: #1c1c24;
+  --color-sk-panel-hover: #22222c;
+  --color-sk-border: rgba(255, 255, 255, 0.08);
+  --color-sk-text: #f6f1ec;
+  --color-sk-muted: rgba(246, 241, 236, 0.6);
+  --color-sk-muted-2: rgba(246, 241, 236, 0.4);
+
+  --color-sk-purple: #9c93f0;
+  --color-sk-pink: #f2a8c6;
+  --color-sk-blue: #a8c7f0;
+
+  --color-sk-green: #7fd9a8;
+  --color-sk-amber: #f0c98a;
+  --color-sk-red: #f0938a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--color-sk-bg);
+  color: var(--color-sk-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-sk-purple);
+  color: var(--color-sk-bg);
+}
+
+/* Scrollbars discretos para tableros/tablas con overflow horizontal. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}

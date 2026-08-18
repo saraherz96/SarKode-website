@@ -5,13 +5,16 @@
   "description": "SarKode landing page — React/TypeScript frontend + Node/Express backend",
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "admin"
   ],
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c blue,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\"",
-    "build": "npm run build -w backend && npm run build -w frontend",
+    "dev": "concurrently -n backend,frontend,admin -c blue,magenta,green \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run dev -w admin\"",
+    "build": "npm run build -w backend && npm run build -w frontend && npm run build -w admin",
     "dev:backend": "npm run dev -w backend",
-    "dev:frontend": "npm run dev -w frontend"
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:admin": "npm run dev -w admin",
+    "test": "npm run test -w backend"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

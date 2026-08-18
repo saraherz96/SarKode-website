@@ -2,6 +2,10 @@
 -- del agente de IA. Copia y pega todo este archivo en el SQL Editor de tu
 -- proyecto de Supabase (https://supabase.com/dashboard/project/_/sql) y dale
 -- "Run" una sola vez.
+--
+-- NOTA: el módulo de CRM interno (contactos, oportunidades, pipeline, citas, propuestas,
+-- pagos, etc.) se agrega encima de este esquema, sin modificarlo, en
+-- backend/supabase/migrations/ — ver backend/supabase/migrations/README.md.
 
 -- Un lead = un contacto/cliente que dejó sus datos, ya sea por el formulario,
 -- el chat del agente, o al agendar una llamada.

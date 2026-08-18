@@ -1,9 +1,17 @@
+type NavSection = 'inicio' | 'servicios';
+
 interface Props {
   scrolled: boolean;
+  activeSection: NavSection;
+  onNavigate: (section: NavSection) => void;
   onOpenContact: () => void;
 }
 
-export default function Navbar({ scrolled, onOpenContact }: Props) {
+function navLinkClass(active: boolean) {
+  return 'sk-nav-link' + (active ? ' sk-nav-link--active' : '');
+}
+
+export default function Navbar({ scrolled, activeSection, onNavigate, onOpenContact }: Props) {
   const navStyle: React.CSSProperties = scrolled
     ? {
         position: 'fixed',
@@ -58,10 +66,10 @@ export default function Navbar({ scrolled, onOpenContact }: Props) {
           boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.08)',
         }}
       >
-        <a href="#top" className="sk-nav-link sk-nav-link--active">
+        <a href="#top" className={navLinkClass(activeSection === 'inicio')} onClick={() => onNavigate('inicio')}>
           Inicio
         </a>
-        <a href="#servicios" className="sk-nav-link">
+        <a href="#servicios" className={navLinkClass(activeSection === 'servicios')} onClick={() => onNavigate('servicios')}>
           Servicios
         </a>
       </div>

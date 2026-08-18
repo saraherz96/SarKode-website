@@ -23,11 +23,8 @@ export default function Footer() {
         <a href="#footer" className="sk-footer-link">
           Contacto
         </a>
-        <a href="#" className="sk-footer-link">
+        <a href="https://www.linkedin.com/company/sarkode/" target="_blank" rel="noreferrer" className="sk-footer-link">
           LinkedIn
-        </a>
-        <a href="#" className="sk-footer-link">
-          Email
         </a>
       </div>
     </div>

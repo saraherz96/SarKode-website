@@ -123,6 +123,30 @@ export async function upsertConversation(input: {
   }
 }
 
+/** Guarda cada turno individualmente en `messages` (además del jsonb completo en
+ * `conversations.messages`, que se conserva tal cual para no romper el historial que ya lee el
+ * chat) — así el CRM conserva el contexto turno por turno del agente de IA, en vez de un solo
+ * bloque de texto. Solo inserta los turnos nuevos de esta llamada (el último mensaje del
+ * usuario, si lo hay, y la respuesta del agente) — el resto ya se insertó en llamadas previas
+ * de la misma conversación. No-op cuando Supabase no está configurado. */
+export async function appendMessages(input: {
+  conversationId: string;
+  turns: { role: 'client' | 'ai_agent'; content: string }[];
+}): Promise<void> {
+  if (!supabase || input.turns.length === 0) return;
+
+  const rows = input.turns.map((t) => ({
+    conversation_id: input.conversationId,
+    sender_role: t.role,
+    content: t.content,
+    channel: 'chat_widget',
+  }));
+  const { error } = await supabase.from('messages').insert(rows);
+  if (error) {
+    console.error('[store] error guardando mensajes individuales:', error.message);
+  }
+}
+
 /** Called when, in the chat, someone who already went through capture_lead says they'd rather
  * be contacted by phone than book a call. Attaches the phone number to their most recent lead
  * row (matched by email) instead of creating a duplicate — then re-fires the notification email

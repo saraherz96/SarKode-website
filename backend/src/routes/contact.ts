@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { persistLead, EMAIL_RE } from '../store';
+import { onContactRequest } from '../crm';
 import type { ContactRequestBody } from '../types';
 
 const router = Router();
@@ -26,6 +27,14 @@ router.post('/', async (req: Request<unknown, unknown, ContactRequestBody>, res:
       source: 'form',
     });
     console.info(`[contact] nuevo mensaje de ${lead.name} <${lead.email}>${lead.service ? ` (${lead.service})` : ''}`);
+    void onContactRequest({
+      fullName: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+      service: lead.service,
+      message: lead.message,
+      source: 'form',
+    });
     return res.status(201).json({ ok: true });
   } catch (err) {
     console.error('[contact] error guardando el mensaje:', err);

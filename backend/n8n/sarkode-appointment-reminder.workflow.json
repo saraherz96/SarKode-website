@@ -1,0 +1,166 @@
+{
+  "name": "SarKode - Recordatorio de llamada",
+  "nodes": [
+    {
+      "id": "sticky_notes",
+      "name": "Notas de configuración",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-40, -360],
+      "parameters": {
+        "width": 620,
+        "height": 420,
+        "content": "## Setup\n1. Importa este workflow en n8n.\n2. Abre **Buscar citas por recordar** y **Marcar recordatorio enviado** (los dos nodos HTTP Request): en cada uno reemplaza `REPLACE_WITH_YOUR_SUPABASE_PROJECT_REF` en la URL, y `REPLACE_WITH_YOUR_SUPABASE_SERVICE_ROLE_KEY` en los headers `apikey` y `Authorization` — usa los mismos valores de `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` de `backend/.env`.\n3. Abre **Recordatorio interno a SarKode** y **Recordatorio al cliente** (los dos nodos Gmail) y en *Credential* selecciona la misma credencial `Gmail OAuth2` que ya usas en el workflow `sarkode-new-lead-notification` (autorizada con sofimh1197@gmail.com) — no hace falta crear una nueva.\n4. Corre 007_crm_appointment_reminders.sql (backend/supabase/migrations/) si todavía no lo hiciste — agrega la columna `reminder_sent_at` que este workflow necesita para no mandar el mismo recordatorio dos veces.\n5. Activa el workflow (toggle arriba a la derecha). No tiene webhook — corre solo, cada 10 minutos.\n\n## Cómo funciona\nCada 10 minutos busca en Supabase las citas (`appointments`) que:\n- están `scheduled` o `confirmed`,\n- empiezan entre 1h50 y 2h10 a partir de ahora (ventana de 20 min sobre un poll de 10 min, así aunque una corrida falle a medias, la siguiente la vuelve a intentar), y\n- todavía no tienen `reminder_sent_at`.\n\nPor cada una: manda un correo a **sofimh1197@gmail.com** con los datos del cliente y la llamada, y otro correo — un recordatorio amistoso — a **el cliente** con el horario y el link de Meet. Solo después de mandar los dos marca `reminder_sent_at` en Supabase, para que si algo falla a medias (por ejemplo Gmail no responde) se reintente en la siguiente corrida en vez de perderse."
+      }
+    },
+    {
+      "id": "schedule_trigger",
+      "name": "Cada 10 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-40, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "http_find_appointments",
+      "name": "Buscar citas por recordar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "https://REPLACE_WITH_YOUR_SUPABASE_PROJECT_REF.supabase.co/rest/v1/appointments",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "id,starts_at,ends_at,timezone,google_meet_url,contacts(full_name,email,company_name),services(name)" },
+            { "name": "status", "value": "in.(scheduled,confirmed)" },
+            { "name": "reminder_sent_at", "value": "is.null" },
+            { "name": "starts_at", "value": "=gte.{{ $now.plus({ minutes: 110 }).toUTC().toISO() }}" },
+            { "name": "starts_at", "value": "=lte.{{ $now.plus({ minutes: 130 }).toUTC().toISO() }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "REPLACE_WITH_YOUR_SUPABASE_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_SUPABASE_SERVICE_ROLE_KEY" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "code_format",
+      "name": "Preparar datos del recordatorio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const tz = $json.timezone || 'America/Mexico_City';\nconst start = DateTime.fromISO($json.starts_at).setZone(tz);\nconst humanLabel = start.setLocale('es').toFormat(\"cccc d 'de' LLLL 'a las' h:mm a\");\nconst contact = $json.contacts || {};\nconst service = $json.services || {};\n\nreturn {\n  json: {\n    id: $json.id,\n    google_meet_url: $json.google_meet_url || null,\n    humanLabel,\n    clientName: contact.full_name || 'Cliente',\n    clientEmail: contact.email || '',\n    clientCompany: contact.company_name || '',\n    serviceName: service.name || 'No especificado',\n  },\n};"
+      }
+    },
+    {
+      "id": "gmail_admin",
+      "name": "Recordatorio interno a SarKode",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [740, 0],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "sofimh1197@gmail.com",
+        "subject": "=Recordatorio: llamada con {{ $json.clientName }} en 2 horas — {{ $json.humanLabel }}",
+        "emailType": "text",
+        "message": "=Recordatorio automático — tienes una llamada agendada en 2 horas.\n\nCliente: {{ $json.clientName }}\nEmail: {{ $json.clientEmail }}\nCompañía: {{ $json.clientCompany || 'No especificada' }}\nServicio: {{ $json.serviceName }}\n\nHorario: {{ $json.humanLabel }}\nEnlace de Google Meet: {{ $json.google_meet_url || 'Revisa la invitación de calendario.' }}\n\nEste correo se generó automáticamente 2 horas antes de la llamada.",
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail - SarKode"
+        }
+      }
+    },
+    {
+      "id": "gmail_client",
+      "name": "Recordatorio al cliente",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1000, 0],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "=¡Nos vemos en 2 horas! Tu llamada con SarKode — {{ $json.humanLabel }}",
+        "emailType": "text",
+        "message": "=Hola {{ $json.clientName }},\n\nEste es un recordatorio amistoso de que tu llamada con el equipo de SarKode es hoy, {{ $json.humanLabel }}. ¡Te esperamos!\n\nEnlace de Google Meet: {{ $json.google_meet_url || 'Revisa la invitación de calendario que te llegó por correo.' }}\n\nSi necesitas reagendar o tienes alguna pregunta antes de la llamada, solo responde a este correo.\n\nNos vemos pronto,\nEl equipo de SarKode",
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail - SarKode"
+        }
+      }
+    },
+    {
+      "id": "http_mark_sent",
+      "name": "Marcar recordatorio enviado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1260, 0],
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://REPLACE_WITH_YOUR_SUPABASE_PROJECT_REF.supabase.co/rest/v1/appointments",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "id", "value": "=eq.{{ $json.id }}" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "REPLACE_WITH_YOUR_SUPABASE_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_SUPABASE_SERVICE_ROLE_KEY" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"reminder_sent_at\": \"{{ $now.toUTC().toISO() }}\"\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Cada 10 minutos": {
+      "main": [[{ "node": "Buscar citas por recordar", "type": "main", "index": 0 }]]
+    },
+    "Buscar citas por recordar": {
+      "main": [[{ "node": "Preparar datos del recordatorio", "type": "main", "index": 0 }]]
+    },
+    "Preparar datos del recordatorio": {
+      "main": [[{ "node": "Recordatorio interno a SarKode", "type": "main", "index": 0 }]]
+    },
+    "Recordatorio interno a SarKode": {
+      "main": [[{ "node": "Recordatorio al cliente", "type": "main", "index": 0 }]]
+    },
+    "Recordatorio al cliente": {
+      "main": [[{ "node": "Marcar recordatorio enviado", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

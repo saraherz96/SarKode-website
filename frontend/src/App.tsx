@@ -21,8 +21,11 @@ function headingWords(progress: number): HeadingWord[] {
   });
 }
 
+type NavSection = 'inicio' | 'servicios';
+
 export default function App() {
   const [scrolled, setScrolled] = useState(false);
+  const [activeSection, setActiveSection] = useState<NavSection>('inicio');
   const [headingProgress, setHeadingProgress] = useState(0);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [servicesModalOpen, setServicesModalOpen] = useState(false);
@@ -73,6 +76,15 @@ export default function App() {
         const progress = Math.max(0, Math.min(1, raw));
         setHeadingProgress((prev) => (Math.abs(progress - prev) > 0.01 ? progress : prev));
       }
+
+      // Nav "active" pill follows scroll position: once the Servicios section has crossed
+      // roughly the upper third of the viewport, highlight it instead of Inicio.
+      const servicios = document.getElementById('servicios');
+      const inServicios = servicios ? servicios.getBoundingClientRect().top <= window.innerHeight * 0.35 : false;
+      setActiveSection((prev) => {
+        const next = inServicios ? 'servicios' : 'inicio';
+        return prev === next ? prev : next;
+      });
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -118,7 +130,7 @@ export default function App() {
 
   return (
     <div style={{ position: 'relative', width: '100%', background: '#14141a', color: '#F6F1EC', fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,sans-serif", overflowX: 'hidden' }}>
-      <Navbar scrolled={scrolled} onOpenContact={openContactModal} />
+      <Navbar scrolled={scrolled} activeSection={activeSection} onNavigate={setActiveSection} onOpenContact={openContactModal} />
       <Hero videoRef={videoRef} />
       <Services headingRef={headingRef} headingWords={headingWords(headingProgress)} services={services} onCardClick={openServicesModal} />
       <ServicesModal open={servicesModalOpen} cardsVisible={servicesCardsVisible} services={services} onClose={closeServicesModal} onSelect={selectService} />

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { persistLead, EMAIL_RE } from '../store';
 import { requestAvailability, confirmSlot } from '../scheduling';
+import { onCallScheduled } from '../crm';
 
 const router = Router();
 
@@ -40,11 +41,12 @@ router.post('/confirm', async (req: Request, res: Response) => {
   const valid = validateNameEmail(req, res);
   if (!valid) return;
 
-  const { start, end, message, service } = (req.body ?? {}) as {
+  const { start, end, message, service, company } = (req.body ?? {}) as {
     start?: unknown;
     end?: unknown;
     message?: unknown;
     service?: unknown;
+    company?: unknown;
   };
   if (typeof start !== 'string' || !start.trim() || typeof end !== 'string' || !end.trim()) {
     return res.status(400).json({ error: 'Falta el horario elegido.' });
@@ -54,6 +56,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
   }
   const need = message.trim();
   const serviceValue = typeof service === 'string' && service.trim() ? service.trim() : null;
+  const companyValue = typeof company === 'string' && company.trim() ? company.trim() : null;
 
   try {
     const result = await confirmSlot(valid.name, valid.email, start.trim(), end.trim(), need, serviceValue);
@@ -65,6 +68,17 @@ router.post('/confirm', async (req: Request, res: Response) => {
       source: 'schedule-link',
     });
     console.info(`[schedule-call] llamada agendada para ${valid.name} <${valid.email}>: ${start.trim()}`);
+    void onCallScheduled({
+      fullName: valid.name,
+      email: valid.email,
+      companyName: companyValue,
+      service: serviceValue,
+      summary: need,
+      startsAt: result.start,
+      endsAt: result.end,
+      googleMeetUrl: result.meetLink,
+      googleCalendarEventId: result.eventId,
+    });
     return res.json(result);
   } catch (err) {
     console.error('[schedule-call] error agendando llamada:', err);

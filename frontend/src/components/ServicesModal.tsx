@@ -71,7 +71,7 @@ export default function ServicesModal({ open, cardsVisible, services, onClose, o
                 key={s.id}
                 className="sk-modal-item"
                 onClick={() => onSelect(s.id)}
-                style={{ position: 'relative', height: 300, cursor: 'pointer', ...cardEnterStyle(cardsVisible, i) }}
+                style={{ position: 'relative', minHeight: 300, cursor: 'pointer', ...cardEnterStyle(cardsVisible, i) }}
               >
                 <div
                   style={{
@@ -101,9 +101,22 @@ export default function ServicesModal({ open, cardsVisible, services, onClose, o
                     <h4 style={{ fontSize: 19, fontWeight: 600, margin: '0 0 6px', letterSpacing: '-0.01em' }}>{s.title}</h4>
                     <p style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.6)', fontSize: 13, margin: '0 0 10px' }}>{s.quote}</p>
                     <p style={{ color: '#9ba0ac', fontSize: 13, lineHeight: 1.6, margin: 0, flex: 1 }}>{s.longDesc}</p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 14 }}>
                       {s.pills.map((pill) => (
-                        <span key={pill} style={{ background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(14px)', padding: '5px 12px', borderRadius: 999, fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
+                        <span
+                          key={pill}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            lineHeight: 1,
+                            background: 'rgba(255,255,255,0.05)',
+                            backdropFilter: 'blur(14px)',
+                            padding: '6px 12px',
+                            borderRadius: 999,
+                            fontSize: 11,
+                            color: 'rgba(255,255,255,0.7)',
+                          }}
+                        >
                           {pill}
                         </span>
                       ))}

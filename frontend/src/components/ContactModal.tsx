@@ -49,6 +49,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
   const [schedMessage, setSchedMessage] = useState('');
   const [schedName, setSchedName] = useState('');
   const [schedEmail, setSchedEmail] = useState('');
+  const [schedCompany, setSchedCompany] = useState('');
   const [schedStatus, setSchedStatus] = useState<'idle' | 'confirming' | 'error'>('idle');
   const [schedError, setSchedError] = useState<string | null>(null);
   const [schedResult, setSchedResult] = useState<ScheduledCall | null>(null);
@@ -74,6 +75,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
       setSchedMessage('');
       setSchedName('');
       setSchedEmail('');
+      setSchedCompany('');
       setSchedStatus('idle');
       setSchedError(null);
       setSchedResult(null);
@@ -137,6 +139,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
           end: schedSelectedSlot.end,
           message: schedMessage.trim(),
           service: schedServiceValue,
+          company: schedCompany.trim() || null,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -286,7 +289,7 @@ export default function ContactModal({ open, services, preselectedService, onClo
               </svg>
               <div>
                 <div style={{ fontFamily: "'JetBrains Mono',monospace", textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: 10, opacity: 0.5, marginBottom: 4 }}>Estudio</div>
-                <div style={{ color: '#F6F1EC', fontSize: 14 }}>Remoto · LatAm</div>
+                <div style={{ color: '#F6F1EC', fontSize: 14 }}>Remoto</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
@@ -344,6 +347,14 @@ export default function ContactModal({ open, services, preselectedService, onClo
                       className="sk-input"
                       style={{ padding: '9px 12px', fontSize: 13 }}
                       required
+                    />
+                    <input
+                      type="text"
+                      placeholder="Tu compañía (opcional)"
+                      value={schedCompany}
+                      onChange={(e) => setSchedCompany(e.target.value)}
+                      className="sk-input"
+                      style={{ padding: '9px 12px', fontSize: 13 }}
                     />
                     {schedError && <div style={{ color: '#F2A8C6', fontSize: 11 }}>{schedError}</div>}
                     <div style={{ display: 'flex', gap: 8 }}>
